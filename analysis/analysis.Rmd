@@ -91,6 +91,7 @@ model_data <-  data%>%
   group_by(experiment)%>%
   mutate(block_individual = scale(block_individual), 
          trial_within_block = scale(trial_within_block))
+
 ```
 
 
@@ -126,7 +127,7 @@ drop1(mnsh, test = "Chisq")
 
 No effect of `sample_feature`. Significant effect of `sample_quantity`. Performance is pretty much at chance when they are trained on `1` (proportion correct = 0.54) and significantly higher (and probably also above chance) when trained on `4` (proportion correct = 0.66).
 
-# Number vs. color
+## Number vs. color
 
 ```{r}
 mnc <- glmer(correct ~ sample_quantity + sample_feature + (block_individual + trial_within_block|subject), 
@@ -145,7 +146,7 @@ No effect of `sample_quantity`. Significant effect of `sample_feature`. Performa
 ## Number vs. surface
 
 ```{r}
-mnsu <- glmer(correct ~ sample_quantity + (block_individual + trial_within_block|subject), 
+mnsu <- glmer(correct ~ sample_quantity + feature_of_numerical_match + (block_individual + trial_within_block|subject), 
         data = model_data %>%filter(experiment == "number_surface"),
         family = binomial,
         control=glmerControl(optimizer="bobyqa",optCtrl=list(maxfun=2e5))
@@ -156,7 +157,7 @@ summary(mnsu)
 drop1(mnsu, test = "Chisq")
 ```
 
-No effect of `sample_quantity`.
+The sample in training was the same size in all cases. Therefore, we include the size fo the target at test (half size or double size) as a predictor. No effect of `sample_quantity` and no effect of `feature_of_numerical_match`.
 
 # Model across experiemnts
 
