@@ -1,0 +1,176 @@
+---
+title: "Quantity judgements in stingless bees"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(brms)
+library(readxl)
+library(tidyboot)
+library(lme4)
+library(ggthemes)
+library(ggridges)
+library(lsr)
+library(broom.mixed)
+library(emmeans)
+
+```
+
+# Data
+
+```{r}
+data <- read_xlsx("../data/stinglesbees_rawdata.xlsx", sheet = 3)%>%
+  mutate(subject = as.factor(subject))
+```
+
+# Sample size
+
+```{r}
+data%>%
+  mutate(experiment = factor(experiment, levels = c("number_only", "number_shape","number_color","number_surface")))%>%
+  group_by(experiment, sample_quantity, sample_feature)%>%
+  summarise(N = length(unique(subject)))
+```
+
+
+# Visualize data by experiment
+
+```{r}
+
+p1 <- data%>%
+  mutate(experiment = factor(experiment, levels = c("number_only", "number_shape","number_color","number_surface")))%>%
+  group_by(subject,experiment)%>%
+  summarise(mean = mean(correct))#
+
+p2 <- data%>%
+  mutate(experiment = factor(experiment, levels = c("number_only", "number_shape","number_color","number_surface")))%>%
+  group_by(experiment)%>%
+  tidyboot_mean(col = correct)
+
+ggplot()+
+  geom_vline(xintercept = 0.5, lty = 2, alpha = .5)+
+  geom_density_ridges(data = p1, aes(y = experiment, x = mean), alpha = .25,scale = 0.9, fill = "grey")+
+  geom_point(data = p1, aes(y = experiment, x = mean), alpha = .5, col = "darkgrey")+
+  geom_pointrange(data = p2, aes(y = experiment, x = mean, xmin = ci_lower, xmax = ci_upper), col = "firebrick")+
+  xlim(0,1)+
+  guides(col = F, fill = F)+
+  scale_fill_colorblind()+
+  scale_color_colorblind()+
+  theme_minimal()
+    
+```
+# Comparison to chance by experiment
+
+```{r}
+data %>%
+  group_by(subject,experiment) %>%
+  summarise(corr = mean(correct)) %>%
+  group_by(experiment)%>%
+  summarise(corr = list(corr))%>%
+  group_by(experiment) %>%
+  mutate(m = mean(unlist(corr)),
+         sd = sd(unlist(corr)),
+         df= t.test(unlist(corr), mu = 0.5)$parameter,
+         t_value = t.test(unlist(corr), mu = 0.5)$statistic,
+         p = t.test(unlist(corr), mu = 0.5)$p.value,
+         d = cohensD(unlist(corr), mu = 0.5))%>%
+  select(experiment,m,sd,t_value,df,p,d) 
+```
+
+Performance is above chance in `number_only` and `number_shape` and not different from chance in the other two conditions.
+
+# Models by experiment
+
+```{r}
+model_data <-  data%>%
+  mutate(experiment = factor(experiment, levels = c("number_only", "number_shape","number_color","number_surface")), 
+         sample_quantity = factor(sample_quantity)) %>%
+  group_by(experiment)%>%
+  mutate(block_individual = scale(block_individual), 
+         trial_within_block = scale(trial_within_block))
+```
+
+
+## Number only
+
+```{r}
+mno <- glmer(correct ~ sample_quantity + (block_individual + trial_within_block|subject), 
+        data = model_data %>%filter(experiment == "number_only"),
+        family = binomial,
+        control=glmerControl(optimizer="bobyqa",optCtrl=list(maxfun=2e5))
+        )
+
+summary(mno)
+
+drop1(mno, test = "Chisq")
+```
+
+Significant effect of `sample_quantity`. Performance is pretty much at chance when they are trained on `1` (proportion correct = 0.47) and significantly higher (and probably also above chance) when trained on `4` (proportion correct = 0.67).
+
+## Number vs. shape
+
+```{r}
+mnsh <- glmer(correct ~ sample_quantity + sample_feature + (block_individual + trial_within_block|subject), 
+        data = model_data %>%filter(experiment == "number_shape"),
+        family = binomial,
+        control=glmerControl(optimizer="bobyqa",optCtrl=list(maxfun=2e5))
+        )
+
+summary(mnsh)
+
+drop1(mnsh, test = "Chisq")
+```
+
+No effect of `sample_feature`. Significant effect of `sample_quantity`. Performance is pretty much at chance when they are trained on `1` (proportion correct = 0.54) and significantly higher (and probably also above chance) when trained on `4` (proportion correct = 0.66).
+
+# Number vs. color
+
+```{r}
+mnc <- glmer(correct ~ sample_quantity + sample_feature + (block_individual + trial_within_block|subject), 
+        data = model_data %>%filter(experiment == "number_color"),
+        family = binomial,
+        control=glmerControl(optimizer="bobyqa",optCtrl=list(maxfun=2e5))
+        )
+
+summary(mnc)
+
+drop1(mnc, test = "Chisq")
+```
+
+No effect of `sample_quantity`. Significant effect of `sample_feature`. Performance is below chance when they are trained on `blue` (proportion correct = 0.36) and significantly higher (but not above chance) when trained on `yellow` (proportion correct = 0.52).
+
+## Number vs. surface
+
+```{r}
+mnsu <- glmer(correct ~ sample_quantity + (block_individual + trial_within_block|subject), 
+        data = model_data %>%filter(experiment == "number_surface"),
+        family = binomial,
+        control=glmerControl(optimizer="bobyqa",optCtrl=list(maxfun=2e5))
+        )
+
+summary(mnsu)
+
+drop1(mnsu, test = "Chisq")
+```
+
+No effect of `sample_quantity`.
+
+# Model across experiemnts
+
+```{r}
+mo <- glmer(correct ~ experiment + sample_quantity + (block_individual + trial_within_block| subject),
+      data = model_data,
+      family = binomial,control=glmerControl(optimizer="bobyqa",optCtrl=list(maxfun=2e5)))
+
+summary(mo)
+
+drop1(mo, test = "Chisq")
+
+emmeans(mo, pairwise ~ experiment, type = "response")$contrasts
+```
+
+Significant effects of `experiment` and `sample_quantity`. Pairwise contrasts show that performance does not differ between `number_only` and `number_shape` but performance in both experiments is significantly better than in `number_color` and `number_surface`, which do not differ from one another.     
+
