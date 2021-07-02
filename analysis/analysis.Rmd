@@ -7,7 +7,6 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 
 library(tidyverse)
-library(brms)
 library(readxl)
 library(tidyboot)
 library(lme4)
@@ -22,8 +21,13 @@ library(emmeans)
 # Data
 
 ```{r}
-data <- read_xlsx("../data/stinglesbees_rawdata.xlsx", sheet = 3)%>%
+# read_xlsx("../data/stinglesbees_rawdata.xlsx", sheet = 3)%>%
+#   select(-time)%>%
+#   write_csv("../data/data.csv")
+
+data <- read_csv("../data/data.csv")%>%
   mutate(subject = as.factor(subject))
+
 ```
 
 # Sample size
@@ -31,37 +35,77 @@ data <- read_xlsx("../data/stinglesbees_rawdata.xlsx", sheet = 3)%>%
 ```{r}
 data%>%
   mutate(experiment = factor(experiment, levels = c("number_only", "number_shape","number_color","number_surface")))%>%
-  group_by(experiment, sample_quantity, sample_feature)%>%
+  group_by(experiment)%>%
   summarise(N = length(unique(subject)))
 ```
-
 
 # Visualize data by experiment
 
 ```{r}
-
 p1 <- data%>%
-  mutate(experiment = factor(experiment, levels = c("number_only", "number_shape","number_color","number_surface")))%>%
+  mutate(experiment = factor(experiment, levels = c("number_only", "number_shape","number_color","number_surface"), labels  = c("Quantity only", "Quantity vs. shape", "Quantity vs. color", "Quantity vs. surface area")))%>%
   group_by(subject,experiment)%>%
   summarise(mean = mean(correct))#
 
 p2 <- data%>%
-  mutate(experiment = factor(experiment, levels = c("number_only", "number_shape","number_color","number_surface")))%>%
+  mutate(experiment = factor(experiment, levels = c("number_only", "number_shape","number_color","number_surface"), labels  = c("Quantity only", "Quantity vs. shape", "Quantity vs. color", "Quantity vs. surface area")))%>%
   group_by(experiment)%>%
   tidyboot_mean(col = correct)
 
 ggplot()+
-  geom_vline(xintercept = 0.5, lty = 2, alpha = .5)+
-  geom_density_ridges(data = p1, aes(y = experiment, x = mean), alpha = .25,scale = 0.9, fill = "grey")+
-  geom_point(data = p1, aes(y = experiment, x = mean), alpha = .5, col = "darkgrey")+
-  geom_pointrange(data = p2, aes(y = experiment, x = mean, xmin = ci_lower, xmax = ci_upper), col = "firebrick")+
-  xlim(0,1)+
+  geom_hline(yintercept = 0.5, lty = 2, alpha = .5)+
+  geom_violin(data = p1, aes(x = experiment, y = mean), alpha = .25, fill = "grey")+
+  geom_point(data = p1, aes(x = experiment, y = mean), alpha = .5, col = "darkgrey")+
+  geom_pointrange(data = p2, aes(x = experiment, y = mean, ymin = ci_lower, ymax = ci_upper), col = "firebrick")+
+  ylim(0,1)+
+  labs(y = "Proportion of choices based on quantity", x = "Experiment")+
   guides(col = F, fill = F)+
-  scale_fill_colorblind()+
   scale_color_colorblind()+
   theme_minimal()
     
 ```
+# Visualize data by experiment, sample quantity and feature (and overall)
+
+```{r}
+
+p2 <- p2 %>%
+  mutate(sample_quantity = "overall",
+         feature = "-")
+
+p3 <- data%>%
+  mutate(experiment = factor(experiment, levels = c("number_only", "number_shape","number_color","number_surface"), labels  = c("Quantity only", "Quantity vs. shape", "Quantity vs. color", "Quantity vs. surface area")))%>%
+  mutate(sample_quantity = factor(sample_quantity),
+         feature = ifelse(experiment == "Quantity vs. surface area", feature_of_numerical_match, sample_feature),
+         feature = ifelse(experiment == "Quantity only", "-",feature))%>%
+  group_by(subject,sample_quantity,feature, experiment)%>%
+  summarise(mean = mean(correct))#
+
+
+p4 <- data%>%
+  mutate(experiment = factor(experiment, levels = c("number_only", "number_shape","number_color","number_surface"), labels  = c("Quantity only", "Quantity vs. shape", "Quantity vs. color", "Quantity vs. surface area")))%>%
+  mutate(sample_quantity = factor(sample_quantity),
+         feature = ifelse(experiment == "Quantity vs. surface area", feature_of_numerical_match, sample_feature),
+         feature = ifelse(experiment == "Quantity only", "-",feature))%>%
+  group_by(sample_quantity,feature, experiment)%>%
+  tidyboot_mean(col = correct)
+
+
+cols = c("#009E73" , "#E69F00","#56B4E9","#F0E442","#0072B2", "#D55E00","#000000")
+
+ggplot()+
+  geom_hline(yintercept = 0.5, lty = 2, alpha = .5)+
+  geom_point(data = p3, aes(x = sample_quantity, y = mean, col = feature),position = position_dodge(width = .5), alpha = .25)+
+  geom_pointrange(data = p4, aes(x = sample_quantity, y = mean, ymin = ci_lower, ymax = ci_upper, col = feature),position = position_dodge(width = .5), pch = 4)+
+  geom_pointrange(data = p2, aes(x = sample_quantity, y = mean, ymin = ci_lower, ymax = ci_upper), col = "firebrick")+
+  facet_grid(~experiment)+
+  labs(y = "Proportion of choices based on quantity", x = "Quantity in training")+
+  scale_color_manual(breaks=c("L", "triangle", "blue", "yellow", "double_size", "half_size"), name = "Feature", values = cols, na.value = "black")+
+  theme_minimal()+
+  theme(panel.border = element_rect(color = "black",fill = NA,size = 1))
+  
+ggsave("../figures/figure2.pdf", width = 10, height = 4)    
+```
+
 # Comparison to chance by experiment
 
 ```{r}
@@ -139,6 +183,7 @@ mnc <- glmer(correct ~ sample_quantity + sample_feature + (block_individual + tr
 summary(mnc)
 
 drop1(mnc, test = "Chisq")
+
 ```
 
 No effect of `sample_quantity`. Significant effect of `sample_feature`. Performance is below chance when they are trained on `blue` (proportion correct = 0.36) and significantly higher (but not above chance) when trained on `yellow` (proportion correct = 0.52).
@@ -155,6 +200,13 @@ mnsu <- glmer(correct ~ sample_quantity + feature_of_numerical_match + (block_in
 summary(mnsu)
 
 drop1(mnsu, test = "Chisq")
+
+data %>%
+  group_by(experiment)%>%
+  summarise(n= length(unique(subject)))
+  filter(experiment == "number_surface")%>%
+  group_by(feature_of_numerical_match) %>%
+  summarise(corr = mean(correct))
 ```
 
 The sample in training was the same size in all cases. Therefore, we include the size fo the target at test (half size or double size) as a predictor. No effect of `sample_quantity` and no effect of `feature_of_numerical_match`.
