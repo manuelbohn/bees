@@ -200,16 +200,9 @@ mnsu <- glmer(correct ~ sample_quantity + feature_of_numerical_match + (block_in
 summary(mnsu)
 
 drop1(mnsu, test = "Chisq")
-
-data %>%
-  group_by(experiment)%>%
-  summarise(n= length(unique(subject)))
-  filter(experiment == "number_surface")%>%
-  group_by(feature_of_numerical_match) %>%
-  summarise(corr = mean(correct))
 ```
 
-The sample in training was the same size in all cases. Therefore, we include the size fo the target at test (half size or double size) as a predictor. No effect of `sample_quantity` and no effect of `feature_of_numerical_match`.
+The sample in training was the same size in all cases. Therefore, we include the size of the target at test (half size or double size) as a predictor. No effect of `sample_quantity` and no effect of `feature_of_numerical_match`.
 
 # Model across experiemnts
 
@@ -227,3 +220,55 @@ emmeans(mo, pairwise ~ experiment, type = "response")$contrasts
 
 Significant effects of `experiment` and `sample_quantity`. Pairwise contrasts show that performance does not differ between `number_only` and `number_shape` but performance in both experiments is significantly better than in `number_color` and `number_surface`, which do not differ from one another.     
 
+# Appendix: Interaction models
+
+The structure of the data in the number vs shape, number vs. color, and number vs. surface experiments allows for modelling an interaction between the quantity of the sample and the feature of the sample (or the numerical match). In fact, when modelling this interaction, it comes out significant for all models. However, we have no good explanation for these interactions and we are unsure if they reflect a meaningful pattern or are an idiosyncrasy of the data that would unlikely replicate using slightly modified stimuli. We therefore do not discuss them in detail in the manuscript. However, for completeness, we want to include these models here. 
+
+## Number vs. shape
+
+```{r}
+mnshi <- glmer(correct ~ sample_quantity * sample_feature + (block_individual + trial_within_block|subject), 
+        data = model_data %>%filter(experiment == "number_shape"),
+        family = binomial,
+        control=glmerControl(optimizer="bobyqa",optCtrl=list(maxfun=2e5))
+        )
+
+summary(mnshi)
+
+drop1(mnshi, test = "Chisq")
+```
+
+Significant interaction between `sample_quantity` and no effect of `sample_feature`. Performance was highest when the sample feature was L-shaped and the sample quantity was 4. 
+
+## Number vs. color
+
+```{r}
+mnci <- glmer(correct ~ sample_quantity * sample_feature + (block_individual + trial_within_block|subject), 
+        data = model_data %>%filter(experiment == "number_color"),
+        family = binomial,
+        control=glmerControl(optimizer="bobyqa",optCtrl=list(maxfun=2e5))
+        )
+
+summary(mnci)
+
+drop1(mnci, test = "Chisq")
+
+```
+
+Significant interaction between `sample_quantity` and `sample_feature`. Performance was lowest when the sample quantity was 1 and the color was blue.   
+
+## Number vs. surface
+
+```{r}
+mnsui <- glmer(correct ~ sample_quantity * feature_of_numerical_match + (block_individual + trial_within_block|subject), 
+        data = model_data %>%filter(experiment == "number_surface"),
+        family = binomial,
+        control=glmerControl(optimizer="bobyqa",optCtrl=list(maxfun=2e5))
+        )
+
+summary(mnsui)
+
+drop1(mnsui, test = "Chisq")
+```
+
+Significant interaction between `sample_quantity` and `feature_of_numerical_match`. When sample quantity was 1, performance was higher when the surface size was double, when the sample quantity was 4, this pattern was reversed. 
