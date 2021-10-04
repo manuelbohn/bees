@@ -21,10 +21,6 @@ library(emmeans)
 # Data
 
 ```{r}
-# read_xlsx("../data/stinglesbees_rawdata.xlsx", sheet = 3)%>%
-#   select(-time)%>%
-#   write_csv("../data/data.csv")
-
 data <- read_csv("../data/data.csv")%>%
   mutate(subject = as.factor(subject))
 
